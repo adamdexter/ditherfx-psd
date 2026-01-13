@@ -228,6 +228,20 @@ function downscale(pixels, width, height, scale) {
     return { pixels: result, width: newWidth, height: newHeight };
 }
 
+// Convert RGB (3 components) to RGBA (4 components) by adding opaque alpha
+function rgbToRgba(pixels, width, height) {
+    const result = new Uint8Array(width * height * 4);
+    for (let i = 0; i < width * height; i++) {
+        const srcIdx = i * 3;
+        const dstIdx = i * 4;
+        result[dstIdx] = pixels[srcIdx];         // R
+        result[dstIdx + 1] = pixels[srcIdx + 1]; // G
+        result[dstIdx + 2] = pixels[srcIdx + 2]; // B
+        result[dstIdx + 3] = 255;                // A (fully opaque)
+    }
+    return result;
+}
+
 // Upscale image using nearest neighbor (keeps the chunky pixel look)
 function upscale(pixels, width, height, targetWidth, targetHeight) {
     const result = new Uint8Array(targetWidth * targetHeight * 4);
@@ -307,9 +321,13 @@ async function applyDither(options) {
         throw new Error(`Image too large (${originalWidth}x${originalHeight}). Maximum: ~${Math.sqrt(maxPixels).toFixed(0)}x${Math.sqrt(maxPixels).toFixed(0)}px. Disable limit in settings to override.`);
     }
     
-    // If not 4 components (RGBA), we need to handle differently
-    if (components !== 4) {
-        throw new Error(`Unexpected pixel format: ${components} components. Expected 4 (RGBA).`);
+    // Handle different pixel formats
+    if (components === 3) {
+        // Convert RGB to RGBA by adding opaque alpha channel
+        console.log("Converting RGB (3 components) to RGBA (4 components)...");
+        pixels = rgbToRgba(pixels, originalWidth, originalHeight);
+    } else if (components !== 4) {
+        throw new Error(`Unexpected pixel format: ${components} components. Expected 3 (RGB) or 4 (RGBA).`);
     }
     
     // Store original alpha if preserving transparency
