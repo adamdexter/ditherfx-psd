@@ -195,6 +195,158 @@ function halftone(pixels, width, height, palette, strength, dotSize = 4, angle =
     return pixels;
 }
 
+function tileGlitch(pixels, width, height, tileSize = 8, severity = 50, mangle = 0) {
+    const tilesX = Math.ceil(width / tileSize);
+    const tilesY = Math.ceil(height / tileSize);
+    const totalTiles = tilesX * tilesY;
+
+    // Create a copy of the original pixels for reading source tiles
+    const original = new Uint8Array(pixels);
+
+    // Seeded random for reproducible-ish results within a single apply
+    const random = () => Math.random();
+
+    // Build list of all tile positions
+    const tilePositions = [];
+    for (let ty = 0; ty < tilesY; ty++) {
+        for (let tx = 0; tx < tilesX; tx++) {
+            tilePositions.push({ tx, ty });
+        }
+    }
+
+    // Create a shuffled mapping for tile swapping based on severity
+    const tileMapping = [...tilePositions];
+    const severityFactor = severity / 100;
+
+    // Shuffle tiles based on severity - higher severity = more randomization
+    for (let i = tileMapping.length - 1; i > 0; i--) {
+        if (random() < severityFactor) {
+            const j = Math.floor(random() * (i + 1));
+            [tileMapping[i], tileMapping[j]] = [tileMapping[j], tileMapping[i]];
+        }
+    }
+
+    // Mangle effects for tile distortion
+    const mangleFactor = mangle / 100;
+
+    // Apply glitch patterns similar to 8-bit/16-bit hardware glitches
+    const glitchEffects = [
+        // Bit shift - simulates VRAM addressing errors
+        (r, g, b, a, x, y) => {
+            const shift = Math.floor(random() * 3) + 1;
+            return [(r << shift) & 255, (g >> shift) & 255, (b << shift) & 255, a];
+        },
+        // Channel swap - simulates palette corruption
+        (r, g, b, a, x, y) => {
+            const swaps = [[g, b, r], [b, r, g], [r, b, g], [g, r, b], [b, g, r]];
+            const swap = swaps[Math.floor(random() * swaps.length)];
+            return [swap[0], swap[1], swap[2], a];
+        },
+        // XOR noise - simulates bit errors in VRAM
+        (r, g, b, a, x, y) => {
+            const noise = Math.floor(random() * 256);
+            return [r ^ noise, g ^ noise, b ^ noise, a];
+        },
+        // Posterize - simulates reduced color depth
+        (r, g, b, a, x, y) => {
+            const levels = [2, 4, 8][Math.floor(random() * 3)];
+            const step = 255 / (levels - 1);
+            return [
+                Math.round(Math.round(r / step) * step),
+                Math.round(Math.round(g / step) * step),
+                Math.round(Math.round(b / step) * step),
+                a
+            ];
+        },
+        // Scanline offset - simulates timing errors
+        (r, g, b, a, x, y) => {
+            const offset = (y % 2 === 0) ? 50 : -50;
+            return [
+                Math.max(0, Math.min(255, r + offset)),
+                Math.max(0, Math.min(255, g + offset)),
+                Math.max(0, Math.min(255, b + offset)),
+                a
+            ];
+        },
+        // Color crush - simulates overflow/underflow
+        (r, g, b, a, x, y) => {
+            const crush = (v) => {
+                const crushed = v * 1.5;
+                return crushed > 255 ? 255 - (crushed - 255) : crushed;
+            };
+            return [Math.floor(crush(r)), Math.floor(crush(g)), Math.floor(crush(b)), a];
+        }
+    ];
+
+    // Process each tile
+    for (let tileIdx = 0; tileIdx < totalTiles; tileIdx++) {
+        const destTile = tilePositions[tileIdx];
+        const srcTile = tileMapping[tileIdx];
+
+        const destX = destTile.tx * tileSize;
+        const destY = destTile.ty * tileSize;
+        const srcX = srcTile.tx * tileSize;
+        const srcY = srcTile.ty * tileSize;
+
+        // Determine if this tile should be mangled
+        const shouldMangle = random() < mangleFactor;
+        const glitchEffect = shouldMangle ? glitchEffects[Math.floor(random() * glitchEffects.length)] : null;
+
+        // Additional mangle: sometimes duplicate rows or columns within a tile
+        const rowGlitch = shouldMangle && random() < 0.3;
+        const colGlitch = shouldMangle && random() < 0.3;
+        const glitchRow = Math.floor(random() * tileSize);
+        const glitchCol = Math.floor(random() * tileSize);
+
+        // Copy tile from source to destination with optional effects
+        for (let py = 0; py < tileSize; py++) {
+            for (let px = 0; px < tileSize; px++) {
+                const actualDestX = destX + px;
+                const actualDestY = destY + py;
+
+                if (actualDestX >= width || actualDestY >= height) continue;
+
+                // Apply row/column duplication glitch
+                let readPy = py;
+                let readPx = px;
+                if (rowGlitch && py > glitchRow) {
+                    readPy = glitchRow; // Repeat a row
+                }
+                if (colGlitch && px > glitchCol) {
+                    readPx = glitchCol; // Repeat a column
+                }
+
+                let actualSrcX = srcX + readPx;
+                let actualSrcY = srcY + readPy;
+
+                // Clamp to image bounds
+                actualSrcX = Math.min(actualSrcX, width - 1);
+                actualSrcY = Math.min(actualSrcY, height - 1);
+
+                const srcIdx = (actualSrcY * width + actualSrcX) * 4;
+                const destIdx = (actualDestY * width + actualDestX) * 4;
+
+                let r = original[srcIdx];
+                let g = original[srcIdx + 1];
+                let b = original[srcIdx + 2];
+                let a = original[srcIdx + 3];
+
+                // Apply glitch effect if mangling this tile
+                if (glitchEffect) {
+                    [r, g, b, a] = glitchEffect(r, g, b, a, px, py);
+                }
+
+                pixels[destIdx] = r;
+                pixels[destIdx + 1] = g;
+                pixels[destIdx + 2] = b;
+                pixels[destIdx + 3] = a;
+            }
+        }
+    }
+
+    return pixels;
+}
+
 // Downscale image by averaging pixels
 function downscale(pixels, width, height, scale) {
     const newWidth = Math.max(1, Math.floor(width / scale));
@@ -257,7 +409,7 @@ function upscale(pixels, width, height, targetWidth, targetHeight) {
 // ============================================================================
 
 async function applyDither(options) {
-    const { algorithm, colorMode, customColors, strength, preserveTransparency, dotSize, angle, scale, limitImageSize } = options;
+    const { algorithm, colorMode, customColors, strength, preserveTransparency, dotSize, angle, scale, limitImageSize, tileSize, severity, mangle } = options;
     
     // Validate document and layer
     const doc = app.activeDocument;
@@ -355,6 +507,7 @@ async function applyDither(options) {
         case 'halftone': halftone(workPixels, workWidth, workHeight, palette, strength, dotSize, angle); break;
         case 'sierra': sierraLite(workPixels, workWidth, workHeight, palette, strength); break;
         case 'stucki': stucki(workPixels, workWidth, workHeight, palette, strength); break;
+        case 'tile-glitch': tileGlitch(workPixels, workWidth, workHeight, tileSize, severity, mangle); break;
         default: floydSteinberg(workPixels, workWidth, workHeight, palette, strength);
     }
     
@@ -423,7 +576,8 @@ function initUI() {
         'random': 'Random threshold per pixel. Best for stipple, grain, film effects.',
         'halftone': 'Circular dot pattern. Best for print simulation, pop art style.',
         'sierra': 'Fast 2-neighbor diffusion. Best for quick processing, decent quality.',
-        'stucki': '12-neighbor diffusion. Best for high quality, subtle gradients.'
+        'stucki': '12-neighbor diffusion. Best for high quality, subtle gradients.',
+        'tile-glitch': '8/16-bit style tile corruption. Best for retro game glitch effects.'
     };
     
     // Settings toggle
@@ -433,10 +587,12 @@ function initUI() {
     
     // Algorithm tooltip update
     document.getElementById("algorithm").addEventListener("change", e => {
-        document.getElementById("algorithmTooltip").textContent = 
+        document.getElementById("algorithmTooltip").textContent =
             algorithmDescriptions[e.target.value] || '';
-        document.getElementById("halftoneOptions").style.display = 
+        document.getElementById("halftoneOptions").style.display =
             e.target.value === "halftone" ? "block" : "none";
+        document.getElementById("tileGlitchOptions").style.display =
+            e.target.value === "tile-glitch" ? "block" : "none";
     });
     
     // Slider value displays
@@ -455,7 +611,19 @@ function initUI() {
     document.getElementById("angle").addEventListener("input", e => {
         document.getElementById("angleValue").textContent = e.target.value;
     });
-    
+
+    document.getElementById("tileSize").addEventListener("input", e => {
+        document.getElementById("tileSizeValue").textContent = e.target.value;
+    });
+
+    document.getElementById("severity").addEventListener("input", e => {
+        document.getElementById("severityValue").textContent = e.target.value;
+    });
+
+    document.getElementById("mangle").addEventListener("input", e => {
+        document.getElementById("mangleValue").textContent = e.target.value;
+    });
+
     // Show/hide sections
     document.getElementById("colorMode").addEventListener("change", e => {
         document.getElementById("customPaletteSection").style.display = 
@@ -479,7 +647,10 @@ function initUI() {
                     preserveTransparency: document.getElementById("preserveTransparency").checked,
                     dotSize: parseInt(document.getElementById("dotSize").value),
                     angle: parseInt(document.getElementById("angle").value),
-                    limitImageSize: document.getElementById("limitImageSize").checked
+                    limitImageSize: document.getElementById("limitImageSize").checked,
+                    tileSize: parseInt(document.getElementById("tileSize").value),
+                    severity: parseInt(document.getElementById("severity").value),
+                    mangle: parseInt(document.getElementById("mangle").value)
                 });
             }, { commandName: "Apply Dither" });
             

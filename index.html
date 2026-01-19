@@ -105,7 +105,7 @@
             padding: 0;
             cursor: pointer;
         }
-        #customPaletteSection, #halftoneOptions {
+        #customPaletteSection, #halftoneOptions, #tileGlitchOptions {
             display: none;
         }
         .header {
@@ -247,6 +247,7 @@
                 <option value="halftone">Halftone</option>
                 <option value="sierra">Sierra Lite</option>
                 <option value="stucki">Stucki</option>
+                <option value="tile-glitch">Tile Glitch</option>
             </select>
             <span class="tooltip-trigger" id="algorithmHelp">?
                 <span class="tooltip-text" id="algorithmTooltip">Classic error diffusion. Best for general purpose, smooth gradients.</span>
@@ -292,6 +293,15 @@
         <input type="range" id="dotSize" min="2" max="16" value="4">
         <label>Angle: <span id="angleValue">45</span>°</label>
         <input type="range" id="angle" min="0" max="90" value="45">
+    </div>
+
+    <div class="section" id="tileGlitchOptions">
+        <label>Tile Size: <span id="tileSizeValue">8</span>px</label>
+        <input type="range" id="tileSize" min="4" max="64" value="8">
+        <label>Severity: <span id="severityValue">50</span>% <span class="hint">(tile rearrangement)</span></label>
+        <input type="range" id="severity" min="0" max="100" value="50">
+        <label>Mangle: <span id="mangleValue">0</span>% <span class="hint">(tile distortion)</span></label>
+        <input type="range" id="mangle" min="0" max="100" value="0">
     </div>
 
     <div class="checkbox-row">
