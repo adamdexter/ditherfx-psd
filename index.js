@@ -195,7 +195,7 @@ function halftone(pixels, width, height, palette, strength, dotSize = 4, angle =
     return pixels;
 }
 
-function tileGlitch(pixels, width, height, tileSize = 8, severity = 50, mangle = 0) {
+function tileGlitch(pixels, width, height, tileSize = 8, shuffle = 50, repeat = 0, mangle = 0) {
     const tilesX = Math.ceil(width / tileSize);
     const tilesY = Math.ceil(height / tileSize);
     const totalTiles = tilesX * tilesY;
@@ -214,15 +214,33 @@ function tileGlitch(pixels, width, height, tileSize = 8, severity = 50, mangle =
         }
     }
 
-    // Create a shuffled mapping for tile swapping based on severity
+    // Create tile mapping based on shuffle (dry/wet mix)
+    // 0% = all tiles stay in original position (100% dry)
+    // 100% = all tiles randomly shuffled (100% wet)
     const tileMapping = [...tilePositions];
-    const severityFactor = severity / 100;
+    const shuffleFactor = shuffle / 100;
 
-    // Shuffle tiles based on severity - higher severity = more randomization
+    // Shuffle tiles based on shuffle factor
     for (let i = tileMapping.length - 1; i > 0; i--) {
-        if (random() < severityFactor) {
+        if (random() < shuffleFactor) {
             const j = Math.floor(random() * (i + 1));
             [tileMapping[i], tileMapping[j]] = [tileMapping[j], tileMapping[i]];
+        }
+    }
+
+    // Apply repeat effect - replace some/all tiles with a single repeated tile
+    // 0% = no repetition, all unique tiles
+    // 100% = one tile repeated everywhere
+    const repeatFactor = repeat / 100;
+    if (repeatFactor > 0) {
+        // Pick a random tile to be the "repeated" tile
+        const repeatedTile = tilePositions[Math.floor(random() * tilePositions.length)];
+
+        // For each tile position, decide whether to replace with repeated tile
+        for (let i = 0; i < tileMapping.length; i++) {
+            if (random() < repeatFactor) {
+                tileMapping[i] = repeatedTile;
+            }
         }
     }
 
@@ -409,7 +427,7 @@ function upscale(pixels, width, height, targetWidth, targetHeight) {
 // ============================================================================
 
 async function applyDither(options) {
-    const { algorithm, colorMode, customColors, strength, preserveTransparency, dotSize, angle, scale, limitImageSize, tileSize, severity, mangle } = options;
+    const { algorithm, colorMode, customColors, strength, preserveTransparency, dotSize, angle, scale, limitImageSize, tileSize, shuffle, repeat, mangle } = options;
     
     // Validate document and layer
     const doc = app.activeDocument;
@@ -507,7 +525,7 @@ async function applyDither(options) {
         case 'halftone': halftone(workPixels, workWidth, workHeight, palette, strength, dotSize, angle); break;
         case 'sierra': sierraLite(workPixels, workWidth, workHeight, palette, strength); break;
         case 'stucki': stucki(workPixels, workWidth, workHeight, palette, strength); break;
-        case 'tile-glitch': tileGlitch(workPixels, workWidth, workHeight, tileSize, severity, mangle); break;
+        case 'tile-glitch': tileGlitch(workPixels, workWidth, workHeight, tileSize, shuffle, repeat, mangle); break;
         default: floydSteinberg(workPixels, workWidth, workHeight, palette, strength);
     }
     
@@ -616,8 +634,12 @@ function initUI() {
         document.getElementById("tileSizeValue").textContent = e.target.value;
     });
 
-    document.getElementById("severity").addEventListener("input", e => {
-        document.getElementById("severityValue").textContent = e.target.value;
+    document.getElementById("shuffle").addEventListener("input", e => {
+        document.getElementById("shuffleValue").textContent = e.target.value;
+    });
+
+    document.getElementById("repeat").addEventListener("input", e => {
+        document.getElementById("repeatValue").textContent = e.target.value;
     });
 
     document.getElementById("mangle").addEventListener("input", e => {
@@ -649,7 +671,8 @@ function initUI() {
                     angle: parseInt(document.getElementById("angle").value),
                     limitImageSize: document.getElementById("limitImageSize").checked,
                     tileSize: parseInt(document.getElementById("tileSize").value),
-                    severity: parseInt(document.getElementById("severity").value),
+                    shuffle: parseInt(document.getElementById("shuffle").value),
+                    repeat: parseInt(document.getElementById("repeat").value),
                     mangle: parseInt(document.getElementById("mangle").value)
                 });
             }, { commandName: "Apply Dither" });
